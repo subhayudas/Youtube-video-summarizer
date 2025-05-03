@@ -1,6 +1,5 @@
-
 import { toast } from "sonner";
-import { ApiKeyConfig, SummaryResult, MindMapData, MindMapNode, MindMapEdge, Topic, YouTubeVideoInfo } from "./types";
+import { ApiKeyConfig, SummaryResult, MindMapData, MindMapNode, MindMapEdge, Topic, YouTubeVideoInfo, QAResponse } from "./types";
 import { YoutubeTranscript } from 'youtube-transcript';
 
 // --- API Key Management --- (Functions remain the same)
@@ -270,6 +269,136 @@ export const generateSummary = async (videoId: string, apiConfig: ApiKeyConfig):
   }
 };
 
+
+// --- Q&A Feature ---
+
+const SYSTEM_PROMPT_QA = `You are an AI assistant that answers questions about YouTube videos based on their transcript. 
+Use ONLY the provided transcript to answer the question. If the answer cannot be found in the transcript, say so clearly.
+Your answers should be:
+1. Accurate and based only on the transcript content
+2. Concise but comprehensive (aim for 2-3 paragraphs)
+3. Include specific details and quotes from the transcript when relevant
+4. Reference timestamps when possible
+
+Format your response as a JSON object with the following structure:
+{
+  "answer": "Your detailed answer here",
+  "confidence": 0.95, // A number between 0-1 indicating how confident you are in the answer
+  "relatedTopics": ["Topic 1", "Topic 2"], // 2-3 main topics from the video related to the question
+  "sources": [
+    { "timestamp": 120, "text": "Relevant quote from transcript" }
+  ] // 1-3 sources that support your answer with approximate timestamps in seconds
+}`;
+
+export const answerVideoQuestion = async (
+  question: string,
+  videoId: string,
+  apiConfig: ApiKeyConfig
+): Promise<QAResponse> => {
+  try {
+    const transcript = await fetchVideoTranscript(videoId);
+    
+    if (apiConfig.provider === 'openai') {
+      return await generateOpenAIAnswer(question, transcript, apiConfig.apiKey);
+    } else if (apiConfig.provider === 'gemini') {
+      return await generateGeminiAnswer(question, transcript, apiConfig.apiKey);
+    } else {
+      throw new Error('Unsupported API provider');
+    }
+  } catch (error) {
+    console.error('Error answering question:', error);
+    throw new Error(`Failed to answer question: ${error instanceof Error ? error.message : 'Unknown error'}`);
+  }
+};
+
+const generateOpenAIAnswer = async (
+  question: string,
+  transcript: string,
+  apiKey: string
+): Promise<QAResponse> => {
+  try {
+    const response = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${apiKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: 'gpt-4o-mini',
+        messages: [
+          { role: 'system', content: SYSTEM_PROMPT_QA },
+          { role: 'user', content: `Transcript: ${transcript}\n\nQuestion: ${question}` }
+        ],
+        temperature: 0.3,
+        response_format: { type: "json_object" }
+      }),
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({ error: { message: 'Failed to parse OpenAI error response' } }));
+      throw new Error(`OpenAI API error: ${errorData.error?.message || response.statusText}`);
+    }
+
+    const data = await response.json();
+    const content = data.choices?.[0]?.message?.content;
+
+    if (!content) {
+      throw new Error('Empty response from OpenAI API');
+    }
+
+    return extractJsonFromAIResponse(content);
+  } catch (error) {
+    console.error('Error generating OpenAI answer:', error);
+    throw new Error(`OpenAI answer generation failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+  }
+};
+
+const generateGeminiAnswer = async (
+  question: string,
+  transcript: string,
+  apiKey: string
+): Promise<QAResponse> => {
+  try {
+    const url = `https://generativelanguage.googleapis.com/v1/models/gemini-pro:generateContent?key=${apiKey}`;
+    
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        contents: [
+          {
+            parts: [
+              { text: SYSTEM_PROMPT_QA },
+              { text: `Transcript: ${transcript}\n\nQuestion: ${question}` }
+            ]
+          }
+        ],
+        generationConfig: {
+          temperature: 0.3,
+        }
+      }),
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({ error: { message: 'Failed to parse Gemini error response' } }));
+      throw new Error(`Gemini API error: ${errorData.error?.message || response.statusText}`);
+    }
+
+    const data = await response.json();
+    const content = data.candidates?.[0]?.content?.parts?.[0]?.text;
+
+    if (!content) {
+      throw new Error('Empty response from Gemini API');
+    }
+
+    return extractJsonFromAIResponse(content);
+  } catch (error) {
+    console.error('Error generating Gemini answer:', error);
+    throw new Error(`Gemini answer generation failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+  }
+};
 
 // --- Mind Map Data Generation (Hierarchical Layout Redesign) ---
 

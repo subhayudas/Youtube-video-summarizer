@@ -1,4 +1,3 @@
-
 export interface ApiKeyConfig {
   provider: 'openai' | 'gemini';
   apiKey: string;
@@ -50,4 +49,19 @@ export interface MindMapEdge {
 export interface MindMapData {
   nodes: MindMapNode[];
   edges: MindMapEdge[];
+}
+
+export interface QARequest {
+  question: string;
+  videoId: string;
+}
+
+export interface QAResponse {
+  answer: string;
+  confidence: number;
+  relatedTopics?: string[];
+  sources?: {
+    timestamp: number;
+    text: string;
+  }[];
 }

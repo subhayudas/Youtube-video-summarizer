@@ -20,6 +20,7 @@ import VideoForm from '@/components/VideoForm';
 import VideoSummary from '@/components/VideoSummary';
 import MindMap from '@/components/MindMap';
 import SavedSummaries from '@/components/SavedSummaries';
+import VideoQA from '@/components/VideoQA';
 
 import { fetchVideoDetails, generateSummary, getApiKey, testApiConnection } from '@/lib/api-service';
 import { SummaryResult, YouTubeVideoInfo } from '@/lib/types';
@@ -201,19 +202,26 @@ const Index = () => {
                 >
                   <AnimatedCard delay={0.6}>
                     <Tabs value={activeTab} onValueChange={setActiveTab}>
-                      <TabsList>
-                        <TabsTrigger value="summary">Text Summary</TabsTrigger>
+                      <TabsList className="grid w-full grid-cols-3 mb-8">
+                        <TabsTrigger value="summary">Summary</TabsTrigger>
                         <TabsTrigger value="mindmap">Mind Map</TabsTrigger>
+                        <TabsTrigger value="qa">Q&A</TabsTrigger>
                       </TabsList>
                       
-                      <TabsContent value="summary">
+                      <TabsContent value="summary" className="space-y-4">
                         <VideoSummary videoInfo={videoInfo} summary={summary} />
                       </TabsContent>
                       
                       <TabsContent value="mindmap">
-                        <ReactFlowProvider>
-                          <MindMap summary={summary} />
-                        </ReactFlowProvider>
+                        <div className="h-[600px] bg-background rounded-md border">
+                          <ReactFlowProvider>
+                            <MindMap summary={summary} />
+                          </ReactFlowProvider>
+                        </div>
+                      </TabsContent>
+
+                      <TabsContent value="qa" className="space-y-4">
+                        <VideoQA videoId={videoInfo?.id || ''} apiConfig={getApiKey()} />
                       </TabsContent>
                     </Tabs>
                   </AnimatedCard>
